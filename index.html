@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>돼지손악기 | 손으로 연주하는 코드 악기</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0f0f11;--card:#18181b;--line:#2a2a2e;--text:#ececef;--muted:#9a9aa2;--accent:#f5a145;--ok:#5fd38d}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',ui-monospace,Consolas,monospace;font-size:14px;line-height:1.6}
+  .wrap{max-width:1000px;margin:0 auto;padding:20px}
+  h1{font-size:22px}h1 b{color:var(--accent)}
+  .sub{color:var(--muted);margin:4px 0 18px}
+  .stage{position:relative;aspect-ratio:4/3;max-height:560px;width:100%;background:#000;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  video{transform:scaleX(-1);opacity:.55}
+  .hud{position:absolute;left:16px;top:12px;pointer-events:none}
+  .chord{font-size:clamp(40px,9vw,84px);font-weight:700;color:var(--accent);line-height:1.1;text-shadow:0 2px 12px #000}
+  .meta{color:var(--text);text-shadow:0 1px 6px #000}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;background:rgba(10,10,12,.82);text-align:center;padding:24px}
+  .overlay.hide{display:none}
+  button,select{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
+  button.primary{border-color:var(--accent);color:var(--accent)}
+  button.primary:hover{background:var(--accent);color:#111}
+  .bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:14px 0}
+  .bar label{color:var(--muted);font-size:12px;display:flex;gap:6px;align-items:center}
+  .pads{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin:8px 0 4px}
+  .pad{padding:14px 0;text-align:center;touch-action:none;user-select:none}
+  .pad.on{background:var(--accent);color:#111;border-color:var(--accent)}
+  .pad small{display:block;color:var(--muted);font-size:11px}
+  .pad.on small{color:#333}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}
+  @media(max-width:700px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h3{font-size:13px;color:var(--accent);letter-spacing:.08em;margin-bottom:8px}
+  .card li{margin-left:18px;color:var(--muted)}
+  .card li b{color:var(--text);font-weight:500}
+  #status{color:var(--muted);font-size:12px}
+  .note{color:var(--muted);font-size:12px;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>돼지<b>손악기</b> 🐷</h1>
+  <p class="sub">손동작으로 코드를 고르고, 멜로디는 직접 노래하세요. 브라우저에서 카메라 영상은 기기 밖으로 나가지 않습니다.</p>
+
+  <div class="stage">
+    <video id="video" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div class="hud"><div class="chord" id="chordName">–</div><div class="meta" id="chordMeta">손을 보여 주세요</div></div>
+    <div class="overlay" id="startBox">
+      <div style="font-size:18px">카메라로 손을 인식해 연주합니다</div>
+      <div class="sub" style="margin:0">헤드폰 착용을 권장합니다 (스피커 소리가 마이크/카메라와 섞이지 않도록)</div>
+      <button class="primary" id="startBtn">▶ 시작하기 (카메라 허용)</button>
+      <button id="noCamBtn">카메라 없이 소리만 써보기</button>
+      <div id="status"></div>
+    </div>
+  </div>
+
+  <div class="bar">
+    <label>키 <select id="key"></select></label>
+    <label>음색 <select id="wave"><option value="sawtooth">패드 (saw)</option><option value="triangle">부드러움 (tri)</option><option value="square">8비트 (sq)</option><option value="sine">순수 (sine)</option></select></label>
+    <label><input type="checkbox" id="minorBtn"> 마이너 (키보드 Shift)</label>
+    <button class="primary" id="camBtn">📷 카메라 켜기</button>
+    <span id="status2" style="color:var(--muted);font-size:12px"></span>
+    <span id="status3" style="color:var(--accent);font-size:12px"></span>
+  </div>
+
+  <div class="pads" id="pads"></div>
+  <div style="color:var(--muted);font-size:12px">카메라 없이도 패드를 누르거나 키보드 1~7을 누르고 있으면 연주됩니다.</div>
+
+  <div class="grid">
+    <div class="card"><h3>왼손 · 코드 선택</h3>
+      <ul>
+        <li><b>손가락 수</b> → I~V (검지부터 1~5개)</li>
+        <li><b>검지+새끼</b> 🤘 → VI</li>
+        <li><b>엄지+검지+새끼</b> 🤟 → VII</li>
+        <li><b>손 기울기</b> → 안쪽 메이저 / 바깥쪽 마이너</li>
+        <li>손이 하나만 보이면 그 손이 코드 손이 됩니다 (한 손 모드)</li>
+      </ul></div>
+    <div class="card"><h3>오른손 · 소리 만들기</h3>
+      <ul>
+        <li><b>손가락 1~4개</b> → 기본 / 1전위 / 7th / 도미넌트7·디미니시드7</li>
+        <li><b>엄지 펴기</b> → 한 옥타브 위</li>
+        <li><b>손 높이</b> → 볼륨 (위쪽이 크게)</li>
+        <li><b>손 기울기</b> → 필터 (밝기)</li>
+      </ul></div>
+  </div>
+  <p class="note">손은 화면에서 보이는 위치 기준으로 구분합니다(화면 왼쪽 = 왼손). 손바닥을 카메라에 향하고, 조명이 밝은 곳에서 사용하세요.</p>
+</div>
+
+<script type="module">
+import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+/* ---------- 음악 이론 ---------- */
+const NOTE = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const MAJOR = [0,2,4,5,7,9,11];
+const ROMAN = ["I","II","III","IV","V","VI","VII"];
+let keyPc = 0;
+
+function chordFor(deg, minor, voicing, up){
+  const root = (keyPc + MAJOR[deg-1]) % 12;
+  const third = minor ? 3 : 4;
+  let iv, suffix;
+  switch(voicing){
+    case 1: iv=[third,7,12,12+third]; suffix=(minor?"m":"")+"/"+NOTE[(root+third)%12]; break;
+    case 2: iv=minor?[0,3,7,10]:[0,4,7,11]; suffix=minor?"m7":"maj7"; break;
+    case 3: iv=minor?[0,3,6,9]:[0,4,7,10]; suffix=minor?"dim7":"7"; break;
+    default: iv=[0,third,7,12]; suffix=minor?"m":"";
+  }
+  const base = 48 + root + (up?12:0);
+  return { midi: iv.map(i=>base+i), bass: 36+root, name: NOTE[root]+suffix, deg };
+}
+const mtof = m => 440*Math.pow(2,(m-69)/12);
+
+/* ---------- 오디오 ---------- */
+let ac, master, filter, voices=[], waveType="sawtooth", started=false;
+function initAudio(){
+  if(ac) return;
+  ac = new (window.AudioContext||window.webkitAudioContext)();
+  master = ac.createGain(); master.gain.value = 0;
+  filter = ac.createBiquadFilter(); filter.type="lowpass"; filter.frequency.value=2500; filter.Q.value=1.2;
+  const out = ac.createGain(); out.gain.value=0.5;
+  // 간단한 리버브
+  const len = ac.sampleRate*2, buf = ac.createBuffer(2,len,ac.sampleRate);
+  for(let c=0;c<2;c++){const d=buf.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.5);}
+  const conv = ac.createConvolver(); conv.buffer=buf;
+  const wet = ac.createGain(); wet.gain.value=0.28;
+  filter.connect(master); master.connect(out); out.connect(ac.destination);
+  master.connect(conv); conv.connect(wet); wet.connect(ac.destination);
+  for(let i=0;i<5;i++){
+    const g = ac.createGain(); g.gain.value = i===4?0.22:0.16; g.connect(filter);
+    const oscs=[-6,6].map(det=>{const o=ac.createOscillator();o.type=waveType;o.detune.value=det;o.frequency.value=220;o.connect(g);o.start();return o;});
+    voices.push({oscs,g});
+  }
+}
+function setWave(t){waveType=t;voices.forEach(v=>v.oscs.forEach(o=>o.type=t));}
+function playChord(ch){
+  if(!ac) return;
+  const notes=[...ch.midi,ch.bass];
+  notes.forEach((m,i)=>{
+    const f=mtof(m);
+    voices[i].oscs.forEach(o=>o.frequency.setTargetAtTime(f,ac.currentTime,0.03));
+  });
+}
+function setGate(level){ if(ac) master.gain.setTargetAtTime(level,ac.currentTime, level>0?0.05:0.3); }
+function setCutoff(hz){ if(ac) filter.frequency.setTargetAtTime(hz,ac.currentTime,0.05); }
+
+/* ---------- 상태 ---------- */
+const $ = id=>document.getElementById(id);
+let cur = { deg:1, minor:false, voicing:0, up:false };
+let gateLevel=0, lastChordKey="";
+let manual = { deg:0 }; // 패드/키보드 입력
+
+function apply(deg, minor, voicing, up, vol){
+  if(!deg){ if(gateLevel!==0){gateLevel=0;setGate(0);} $("chordName").textContent="–"; $("chordMeta").textContent="손을 보여 주세요"; lastChordKey=""; return; }
+  const ch = chordFor(deg,minor,voicing,up);
+  const k = ch.midi.join(",")+ch.bass;
+  if(k!==lastChordKey){ playChord(ch); lastChordKey=k; }
+  const g = vol*0.9; setGate(g); gateLevel=g;
+  $("chordName").textContent=ch.name;
+  $("chordMeta").textContent=`${ROMAN[deg-1]} · ${minor?"minor":"major"} · ${["기본","1전위","7th","dom7/dim7"][voicing]}${up?" · 옥타브↑":""} · vol ${Math.round(vol*100)}%`;
+  document.querySelectorAll(".pad").forEach((p,i)=>p.classList.toggle("on",i===deg-1));
+}
+
+/* ---------- UI: 키/패드 ---------- */
+NOTE.forEach((n,i)=>{const o=document.createElement("option");o.value=i;o.textContent=n+" major";$("key").appendChild(o);});
+$("key").onchange=e=>{keyPc=+e.target.value;lastChordKey="";};
+$("wave").onchange=e=>setWave(e.target.value);
+ROMAN.forEach((r,i)=>{
+  const b=document.createElement("button");b.className="pad";b.innerHTML=`${r}<small>${i+1}</small>`;
+  const down=()=>{initAudio();ac.resume();manual.deg=i+1;};
+  const up=()=>{if(manual.deg===i+1)manual.deg=0;};
+  b.addEventListener("pointerdown",down);b.addEventListener("pointerup",up);b.addEventListener("pointerleave",up);
+  $("pads").appendChild(b);
+});
+let shift=false;
+addEventListener("keydown",e=>{if(e.key==="Shift")shift=true;if(/^[1-7]$/.test(e.key)){initAudio();ac.resume();manual.deg=+e.key;}});
+addEventListener("keyup",e=>{if(e.key==="Shift")shift=false;if(+e.key===manual.deg)manual.deg=0;});
+function manualTick(){
+  if(handsActive) return;
+  const minor=$("minorBtn").checked||shift;
+  apply(manual.deg,minor,0,false,0.8);
+  if(!manual.deg) document.querySelectorAll(".pad").forEach(p=>p.classList.remove("on"));
+}
+
+/* ---------- 손 인식 ---------- */
+const video=$("video"), canvas=$("overlay"), ctx=canvas.getContext("2d");
+let landmarker=null, handsActive=false, running=false;
+const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+
+function fingers(h){ // [엄지,검지,중지,약지,새끼] 펴짐 여부
+  const w=h[0];
+  const ext=(tip,pip)=>d(h[tip],w)>d(h[pip],w)*1.12;
+  const thumb=d(h[4],h[17])>d(h[3],h[17])*1.12 && d(h[4],h[5])>d(h[3],h[5])*1.05;
+  return [thumb,ext(8,6),ext(12,10),ext(16,14),ext(20,18)];
+}
+function tiltOf(h){ // 미러된 좌표 기준 손목→중지 MCP 벡터 각도(rad). 오른쪽으로 기울면 +
+  const dx=-(h[9].x-h[0].x), dy=h[9].y-h[0].y;
+  return Math.atan2(dx,-dy);
+}
+function degreeFrom(f){
+  const [t,i,m,r,p]=f;
+  const n=[i,m,r,p].filter(Boolean).length;
+  if(t&&i&&!m&&!r&&p) return 7;
+  if(!t&&i&&!m&&!r&&p) return 6;
+  if(t&&n===4) return 5;
+  if(!t&&n===4) return 4;
+  if(i&&m&&r&&!p) return 3;
+  if(i&&m&&!r&&!p) return 2;
+  if(i&&!m&&!r&&!p) return 1;
+  return 0;
+}
+// 깜빡임 방지: 같은 값이 N프레임 연속일 때만 확정
+function debouncer(n){let c=null,k=0,v=null;return x=>{if(x===c){k++;}else{c=x;k=1;}if(k>=n)v=c;return v;};}
+const dDeg=debouncer(3), dVoi=debouncer(3);
+let minorState=false;
+
+const BONES=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+function draw(h,color){
+  const W=canvas.width,H=canvas.height;
+  ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=3;
+  BONES.forEach(([a,b])=>{ctx.beginPath();ctx.moveTo((1-h[a].x)*W,h[a].y*H);ctx.lineTo((1-h[b].x)*W,h[b].y*H);ctx.stroke();});
+  h.forEach(p=>{ctx.beginPath();ctx.arc((1-p.x)*W,p.y*H,4,0,7);ctx.fill();});
+}
+
+function loop(){
+  if(!running) return;
+  if(video.readyState>=2 && video.videoWidth){
+    if(canvas.width!==video.videoWidth){canvas.width=video.videoWidth;canvas.height=video.videoHeight;}
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const res=landmarker.detectForVideo(video,performance.now());
+    let hands=(res.landmarks||[]).map(h=>({h,cx:1-h[9].x}));
+    hands.sort((a,b)=>a.cx-b.cx);
+    handsActive=hands.length>0;
+    if(hands.length){
+      const L=hands[0].h, R=hands.length>1?hands[1].h:null;
+      draw(L,"#f5a145"); if(R) draw(R,"#5fd38d");
+      const deg=dDeg(degreeFrom(fingers(L)));
+      const t=tiltOf(L);
+      if(t>0.18)minorState=false; else if(t<-0.18)minorState=true; // 안쪽(+)=메이저
+      let voicing=0, up=false, vol=0.75;
+      if(R){
+        const f=fingers(R);
+        const n=[f[1],f[2],f[3],f[4]].filter(Boolean).length;
+        voicing=dVoi(Math.min(Math.max(n,1),4)-1);
+        up=f[0];
+        vol=Math.min(1,Math.max(0.05,1-((R[9].y-0.15)/0.7)));
+        const rt=tiltOf(R); // -0.9..0.9 → 300..6000Hz
+        const x=Math.min(1,Math.max(0,(rt+0.9)/1.8));
+        setCutoff(300*Math.pow(20,x));
+      } else setCutoff(2500);
+      apply(deg||0,minorState,voicing,up,vol);
+      $("status2").textContent=R?"두 손 모드":"한 손 모드";
+    } else {
+      apply(manual.deg,($("minorBtn").checked||shift),0,false,0.8);
+      $("status2").textContent="";
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+async function startCamera(){
+  if(running) return;
+  $("startBox").classList.remove("hide");
+  $("status").textContent="모델 불러오는 중…";
+  try{
+    initAudio(); await ac.resume();
+    const fs=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+    landmarker=await HandLandmarker.createFromOptions(fs,{
+      baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",delegate:"GPU"},
+      runningMode:"VIDEO",numHands:2});
+    $("status").textContent="카메라 연결 중…";
+    video.srcObject=await navigator.mediaDevices.getUserMedia({video:{width:960,height:720,facingMode:"user"},audio:false});
+    await video.play();
+    $("startBox").classList.add("hide");
+    running=true; loop();
+  }catch(e){
+    $("status").textContent="오류: "+(e.message||e)+" — 카메라 권한과 HTTPS/localhost 접속을 확인하세요.";
+  }
+}
+$("startBtn").onclick=startCamera;
+$("camBtn").onclick=startCamera;
+$("noCamBtn").onclick=()=>{initAudio();ac.resume();$("startBox").classList.add("hide");};
+setInterval(manualTick,50);
+</script>
+</body>
+</html>
